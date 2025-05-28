@@ -1,6 +1,8 @@
 
 ## Install the EKS cluster 
 
+![Logo](https://imgs.search.brave.com/7HRiScvUDVmqEKCLYaHvAE0_PqH7vA039HNdcAYO8_M/rs:fit:500:0:0:0/g:ce/aHR0cHM6Ly9kZXZv/cHNjdWJlLmNvbS9j/b250ZW50L2ltYWdl/cy8yMDI1LzAzL2lt/YWdlLTctNTYucG5n)
+
 Launch the cluster using eksctl utility
 
 create cluster named my-cluster in us-east-1 zone without nodegroups
