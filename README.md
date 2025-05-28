@@ -156,7 +156,7 @@ helm repo add fluent https://fluent.github.io/helm-charts
 ```
 
 ```bash
-helm install fluent-bit fluent/fluent-bit -f fluentbit-values.yaml -n logging
+helm install fluent-bit fluent/fluent-bit -f fluentbit-cm.yaml -n logging
 ```
 contents of fluent-bit values are shown given in fluent-cm.yaml
 
