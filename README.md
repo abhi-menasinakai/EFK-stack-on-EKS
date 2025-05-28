@@ -1,28 +1,4 @@
 
-# EFK Stack on EKS
-
-This project shows the configurations of EFK stack onto the EKS cluster.
- 
-
-
-![Logo](https://imgs.search.brave.com/7HRiScvUDVmqEKCLYaHvAE0_PqH7vA039HNdcAYO8_M/rs:fit:500:0:0:0/g:ce/aHR0cHM6Ly9kZXZv/cHNjdWJlLmNvbS9j/b250ZW50L2ltYWdl/cy8yMDI1LzAzL2lt/YWdlLTctNTYucG5n)
-
-
-## Documentation
-
-This ReadMe file contains step by step procedure to provision EKS cluster and Install EFK stack on EKS cluster using helm charts.
-So Let's begin,
-
-  1. Install EKS cluster
-  2. Configure ElasticSearch using helm charts using EBS volume as statefulset
-  3. Configure FluentBit using helm
-  4. Integrate FluentBit with ElasticSearch
-  4. Configure Kibana Dashboard using helm
-  5. Kibana Integration with ElasticSearch
-
-
-
-
 ## Install the EKS cluster 
 
 Launch the cluster using eksctl utility
@@ -140,3 +116,144 @@ use below command to get OIDC URL
 ```
 
 ElasticSearch Installation:
+
+Now Install ElasticSearch using helm:
+```bash
+  helm repo add elastic https://helm.elastic.co
+```
+
+```bash
+  helm install elasticsearch \
+--set replicas=1 \
+--set volumeClaimTemplate.storageClassName=gp2 \
+--set persistence.labels.enabled=true elastic/elasticsearch -n logging
+```
+
+Now use below command to get user and password generated in elasticsearch pods.
+
+```bash
+  kubectl get secrets --namespace=logging elasticsearch-master-credentials -ojsonpath='{.data.username}' | base64 -d 
+```
+
+```bash
+kubectl get secrets --namespace=logging elasticsearch-master-credentials -ojsonpath='{.data.password}' | base64 -d
+```
+
+Testing of Elsatic search 
+Check the ElasticSearch accessibility using it's service and ensure it's connectivity to store the logs in EBS. Make sure 
+```bash
+kubectl run curl-test --image=radial/busyboxplus:curl -it --rm --restart=Never -- sh
+```
+```bash
+curl -u <elastic-user>:<elastic-passwd> -k https://elasticsearch-master.default.svc.cluster.local:9200
+```
+
+
+Installing FluentBit:
+Install FluentBit using helm charts as shown
+```bash
+helm repo add fluent https://fluent.github.io/helm-charts
+```
+
+```bash
+helm install fluent-bit fluent/fluent-bit -f fluentbit-values.yaml -n logging
+```
+contents of fluent-bit values are shown below.
+
+```bash
+apiVersion: v1
+data:
+  custom_parsers.conf: |
+    [PARSER]
+        Name docker_no_time
+        Format json
+        Time_Keep Off
+        Time_Key time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L
+  fluent-bit.conf: |
+    [SERVICE]
+        Daemon Off
+        Flush 1
+        Log_Level info
+        Parsers_File /fluent-bit/etc/parsers.conf
+        Parsers_File /fluent-bit/etc/conf/custom_parsers.conf
+        HTTP_Server On
+        HTTP_Listen 0.0.0.0
+        HTTP_Port 2020
+        Health_Check On
+
+    [INPUT]
+        Name tail
+        Path /var/log/containers/*.log
+        multiline.parser docker, cri
+        Tag kube.*
+        Mem_Buf_Limit 5MB
+        Skip_Long_Lines On
+
+    [INPUT]
+        Name systemd
+        Tag host.*
+        Systemd_Filter _SYSTEMD_UNIT=kubelet.service
+        Read_From_Tail On
+
+    [FILTER]
+        Name kubernetes
+        Match kube.*
+        Merge_Log On
+        Keep_Log Off
+        K8S-Logging.Parser On
+        K8S-Logging.Exclude On
+
+    [OUTPUT]
+        Name es
+        Match kube.*
+        Host elasticsearch-master.default.svc.cluster.local
+        Port 9200
+        TLS On
+        TLS.Verify off
+        HTTP_User elastic
+        HTTP_Passwd 8uROQOSbIhMALKec
+        Retry_Limit False
+        Suppress_Type_Name On
+        Replace_Dots On
+
+    [OUTPUT]
+        Name es
+        Match host.*
+        Host elasticsearch-master.default.svc.cluster.local
+        Port 9200
+        TLS On
+        TLS.Verify off
+        HTTP_User elastic
+        HTTP_Passwd 8uROQOSbIhMALKec
+        Logstash_Prefix node
+        Retry_Limit False
+        Suppress_Type_Name On
+        Replace_Dots On
+kind: ConfigMap
+metadata:
+  annotations:
+    meta.helm.sh/release-name: my-release
+    meta.helm.sh/release-namespace: default
+  creationTimestamp: "2025-05-26T06:38:36Z"
+  labels:
+    app.kubernetes.io/instance: my-release
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: fluent-bit
+    app.kubernetes.io/version: 4.0.1
+    helm.sh/chart: fluent-bit-0.49.0
+  name: my-release-fluent-bit
+  namespace: default
+  resourceVersion: "31536"
+  uid: 5426e512-8f4f-4e49-85e3-0c8394165e22
+  ```
+  
+  Now install kibana dashboard using helm as well
+
+  ```bash
+  helm install kibana --set service.type=LoadBalancer elastic/kibana -n logging
+  ```
+
+Once the Kibana dashboard is installed access the dashboard using access credentials fetched from Elastoc search sts secrets. 
+Thanks for Reading...!
+
